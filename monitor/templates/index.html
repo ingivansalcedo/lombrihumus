@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lombricultura – Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root { --fondo:#f4f6f1; --tarjeta:#fff; --texto:#1f2a1f; --suave:#6b786b;
+          --ok:#2e7d32; --aviso:#e65100; --alerta:#c62828; --linea:#1565c0; --banda:rgba(46,125,50,.12); }
+  @media (prefers-color-scheme: dark) {
+    :root { --fondo:#121712; --tarjeta:#1c231c; --texto:#e6ece6; --suave:#93a193;
+            --ok:#66bb6a; --aviso:#ffb74d; --alerta:#ef5350; --linea:#64b5f6; --banda:rgba(102,187,106,.15); } }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:1rem; background:var(--fondo); color:var(--texto);
+         font-family:system-ui,sans-serif; }
+  main { max-width:900px; margin:0 auto; display:grid; gap:1rem; }
+  header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.5rem; }
+  h1 { font-size:1.3rem; margin:0; }
+  .tarjeta { background:var(--tarjeta); border-radius:12px; padding:1.2rem;
+             box-shadow:0 1px 3px rgba(0,0,0,.12); }
+  .valor { font-size:3.5rem; font-weight:700; line-height:1; }
+  .valor.medio { font-size:2.4rem; }
+  .valor.ok { color:var(--ok); } .valor.aviso { color:var(--aviso); }
+  .valor.critico { color:var(--alerta); font-weight:800; }
+  .suave { color:var(--suave); font-size:.9rem; }
+  .fila { display:flex; gap:1.5rem; flex-wrap:wrap; align-items:baseline; }
+  select { background:var(--tarjeta); color:var(--texto); border:1px solid var(--suave);
+           border-radius:6px; padding:.3rem; }
+  .grafico { position:relative; height:320px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>🪱 Monitor de lombricultura</h1>
+    <span id="conexion" class="suave">Conectando…</span>
+  </header>
+
+  <section class="tarjeta">
+    <div class="suave">Humedad del sustrato (ideal {{ hum_min|int }}–{{ hum_max|int }} %)</div>
+    <div class="fila">
+      <div id="humedad" class="valor">--</div>
+      <div>
+        <div id="estado">Sin datos</div>
+        <div id="detalle" class="suave"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tarjeta">
+    <div class="suave">Ambiente (sensor DHT11)</div>
+    <div class="fila">
+      <div><div id="temp" class="valor medio">--</div><div class="suave">Temperatura</div></div>
+      <div><div id="humAmb" class="valor medio">--</div><div class="suave">Humedad relativa</div></div>
+    </div>
+    <div id="detalleAmb" class="suave" style="margin-top:.6rem"></div>
+  </section>
+
+  <section class="tarjeta">
+    <div class="fila" style="justify-content:space-between">
+      <strong>Histórico de humedad</strong>
+      <label class="suave">Periodo
+        <select id="horas">
+          <option value="1">1 hora</option>
+          <option value="6">6 horas</option>
+          <option value="24" selected>24 horas</option>
+          <option value="168">7 días</option>
+          <option value="720">30 días</option>
+        </select>
+      </label>
+    </div>
+    <div class="grafico"><canvas id="grafico"></canvas></div>
+  </section>
+
+  <section class="tarjeta">
+    <strong>Histórico del ambiente</strong>
+    <div class="grafico"><canvas id="graficoAmb"></canvas></div>
+  </section>
+</main>
+
+<script>
+const MIN = {{ hum_min }}, MAX = {{ hum_max }};
+const $ = id => document.getElementById(id);
+
+const grafico = new Chart($('grafico'), {
+  type: 'line',
+  data: { labels: [], datasets: [
+    { label: 'Humedad (%)', data: [], borderColor: '#1565c0', pointRadius: 0, tension: .25, borderWidth: 2 },
+    { label: 'Mínimo', data: [], borderColor: '#c62828', borderDash: [6,4], pointRadius: 0, borderWidth: 1 },
+    { label: 'Máximo', data: [], borderColor: '#c62828', borderDash: [6,4], pointRadius: 0, borderWidth: 1 },
+  ]},
+  options: { responsive: true, maintainAspectRatio: false, animation: false,
+    scales: { y: { min: 0, max: 100, title: { display: true, text: '%' } },
+              x: { ticks: { maxTicksLimit: 8 } } },
+    plugins: { legend: { position: 'bottom' } } }
+});
+
+const LIM = {{ limites|tojson }};  // {sensor: {min, max, crit_min, crit_max}}
+
+const graficoAmb = new Chart($('graficoAmb'), {
+  type: 'line',
+  data: { labels: [], datasets: [
+    { label: 'Temperatura (°C)', data: [], borderColor: '#ef6c00', pointRadius: 0, tension: .25, borderWidth: 2, yAxisID: 'yT' },
+    { label: 'Humedad relativa (%)', data: [], borderColor: '#00897b', pointRadius: 0, tension: .25, borderWidth: 2, yAxisID: 'yH' },
+  ]},
+  options: { responsive: true, maintainAspectRatio: false, animation: false,
+    scales: { yT: { position: 'left', title: { display: true, text: '°C' } },
+              yH: { position: 'right', min: 0, max: 100, title: { display: true, text: '%' },
+                    grid: { drawOnChartArea: false } },
+              x: { ticks: { maxTicksLimit: 8 } } },
+    plugins: { legend: { position: 'bottom' } } }
+});
+
+// 0 = en rango, 1 = fuera del ideal (advertencia), 2 = crítico
+function nivel(clave, v) {
+  const l = LIM[clave];
+  if (!l) return 0;
+  if ((l.crit_min != null && v < l.crit_min) || (l.crit_max != null && v > l.crit_max)) return 2;
+  return (v < l.min || v > l.max) ? 1 : 0;
+}
+// Sin límites configurados el valor se muestra sin color de estado
+const clase = (clave, v) => LIM[clave] ? ['ok', 'aviso', 'critico'][nivel(clave, v)] : '';
+
+async function actualizarActual() {
+  try {
+    const r = await (await fetch('/api/actual')).json();
+    $('conexion').textContent = (r.conexion.conectado ? '🟢 ' : '🔴 ') + r.conexion.mensaje;
+    const l = r.lectura;
+    if (!l) return;
+    const h = l.humedad_pct, n = nivel('humedad', h), seco = h < MIN;
+    $('humedad').textContent = h.toFixed(1) + ' %';
+    $('humedad').className = 'valor ' + clase('humedad', h);
+    $('estado').textContent = n === 2 ? (seco ? '🚨 CRÍTICO: sustrato muy seco' : '🚨 CRÍTICO: exceso de agua')
+                            : n === 1 ? (seco ? '⚠️ Demasiado seco' : '⚠️ Demasiado húmedo')
+                            : '✅ En rango ideal';
+    $('detalle').textContent = `Valor crudo: ${l.humedad_cruda} · D0: ${l.humedad_d0} · ${l.timestamp.replace('T',' ')}`;
+
+    const hayAmb = l.temp_ambiente !== '' && l.temp_ambiente != null;
+    $('temp').textContent = hayAmb ? l.temp_ambiente.toFixed(1) + ' °C' : '--';
+    $('humAmb').textContent = hayAmb ? l.hum_ambiente.toFixed(0) + ' %' : '--';
+    $('temp').className = 'valor medio ' + (hayAmb ? clase('temp_ambiente', l.temp_ambiente) : '');
+    $('humAmb').className = 'valor medio ' + (hayAmb ? clase('hum_ambiente', l.hum_ambiente) : '');
+    $('detalleAmb').textContent = hayAmb ? '' : '⚠️ Sin lectura reciente del DHT11 (revisa el cableado en el pin 3)';
+  } catch { $('conexion').textContent = '🔴 Servidor no responde'; }
+}
+
+async function actualizarHistorial() {
+  const datos = await (await fetch('/api/historial?horas=' + $('horas').value)).json();
+  const largo = $('horas').value > 24;
+  grafico.data.labels = datos.map(d => {
+    const f = new Date(d.timestamp);
+    return largo ? f.toLocaleString([], {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'})
+                 : f.toLocaleTimeString();
+  });
+  grafico.data.datasets[0].data = datos.map(d => +d.humedad_pct);
+  grafico.data.datasets[1].data = datos.map(() => MIN);
+  grafico.data.datasets[2].data = datos.map(() => MAX);
+  grafico.update();
+
+  // Las filas sin DHT11 (vacías) quedan como hueco en la línea
+  const num = v => (v === '' || v == null) ? null : +v;
+  graficoAmb.data.labels = grafico.data.labels;
+  graficoAmb.data.datasets[0].data = datos.map(d => num(d.temp_ambiente));
+  graficoAmb.data.datasets[1].data = datos.map(d => num(d.hum_ambiente));
+  graficoAmb.update();
+}
+
+$('horas').addEventListener('change', actualizarHistorial);
+actualizarActual(); actualizarHistorial();
+setInterval(actualizarActual, 2000);
+setInterval(actualizarHistorial, 15000);
+</script>
+</body>
+</html>

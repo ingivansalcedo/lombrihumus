@@ -1,0 +1,7 @@
+.venv/
+.env
+__pycache__/
+datos/*.csv
+codigo_esp32/secrets.h
+datos/*.bak
+2026-*.txt
