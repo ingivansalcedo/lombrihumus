@@ -5,3 +5,4 @@ datos/*.csv
 codigo_esp32/secrets.h
 datos/*.bak
 2026-*.txt
+proyecto_1_prompt.txt

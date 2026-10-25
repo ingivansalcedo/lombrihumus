@@ -7,6 +7,7 @@ from . import config
 
 NOMBRES = {
     "humedad": "Humedad del sustrato",
+    "temp_sustrato": "Temperatura del sustrato",
     "temp_ambiente": "Temperatura ambiente",
     "hum_ambiente": "Humedad relativa del ambiente",
 }

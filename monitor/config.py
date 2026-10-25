@@ -39,6 +39,13 @@ def _limite_opcional(nombre, var_min, var_max, unidad):
         LIMITES[nombre] = (float(minimo), float(maximo), unidad)
 
 
+# Temperatura del sustrato (DS18B20): ideal 18–25 °C, configurable en el .env
+LIMITES["temp_sustrato"] = (
+    float(os.getenv("TEMP_SUS_MIN", "18")),
+    float(os.getenv("TEMP_SUS_MAX", "25")),
+    "°C",
+)
+
 _limite_opcional("temp_ambiente", "TEMP_AMB_MIN", "TEMP_AMB_MAX", "°C")
 _limite_opcional("hum_ambiente", "HUM_AMB_MIN", "HUM_AMB_MAX", "%")
 
@@ -58,6 +65,7 @@ def _critico(nombre, prefijo, minimo_def, maximo_def):
 
 
 _critico("humedad", "HUMEDAD", "60", "90")          # deshidratación / falta de oxígeno
+_critico("temp_sustrato", "TEMP_SUS", "10", "30")   # letargo / estrés térmico en el lecho
 _critico("temp_ambiente", "TEMP_AMB", "10", "30")   # letargo / estrés térmico
 _critico("hum_ambiente", "HUM_AMB", "40", "")       # costra seca en la superficie
 

@@ -49,6 +49,17 @@
   </section>
 
   <section class="tarjeta">
+    <div class="suave">Temperatura del sustrato (ideal {{ limites.temp_sustrato.min|int }}–{{ limites.temp_sustrato.max|int }} °C)</div>
+    <div class="fila">
+      <div id="tempSus" class="valor">--</div>
+      <div>
+        <div id="estadoSus">Sin datos</div>
+        <div id="detalleSus" class="suave"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tarjeta">
     <div class="suave">Ambiente (sensor DHT11)</div>
     <div class="fila">
       <div><div id="temp" class="valor medio">--</div><div class="suave">Temperatura</div></div>
@@ -74,7 +85,7 @@
   </section>
 
   <section class="tarjeta">
-    <strong>Histórico del ambiente</strong>
+    <strong>Histórico de temperaturas y humedad del ambiente</strong>
     <div class="grafico"><canvas id="graficoAmb"></canvas></div>
   </section>
 </main>
@@ -101,7 +112,8 @@ const LIM = {{ limites|tojson }};  // {sensor: {min, max, crit_min, crit_max}}
 const graficoAmb = new Chart($('graficoAmb'), {
   type: 'line',
   data: { labels: [], datasets: [
-    { label: 'Temperatura (°C)', data: [], borderColor: '#ef6c00', pointRadius: 0, tension: .25, borderWidth: 2, yAxisID: 'yT' },
+    { label: 'Temp. sustrato (°C)', data: [], borderColor: '#6a1b9a', pointRadius: 0, tension: .25, borderWidth: 2, yAxisID: 'yT' },
+    { label: 'Temp. ambiente (°C)', data: [], borderColor: '#ef6c00', pointRadius: 0, tension: .25, borderWidth: 2, yAxisID: 'yT' },
     { label: 'Humedad relativa (%)', data: [], borderColor: '#00897b', pointRadius: 0, tension: .25, borderWidth: 2, yAxisID: 'yH' },
   ]},
   options: { responsive: true, maintainAspectRatio: false, animation: false,
@@ -136,6 +148,22 @@ async function actualizarActual() {
                             : '✅ En rango ideal';
     $('detalle').textContent = `Valor crudo: ${l.humedad_cruda} · D0: ${l.humedad_d0} · ${l.timestamp.replace('T',' ')}`;
 
+    const haySus = l.temp_sustrato !== '' && l.temp_sustrato != null;
+    if (haySus) {
+      const t = l.temp_sustrato, ns = nivel('temp_sustrato', t), frio = t < LIM.temp_sustrato.min;
+      $('tempSus').textContent = t.toFixed(1) + ' °C';
+      $('tempSus').className = 'valor ' + clase('temp_sustrato', t);
+      $('estadoSus').textContent = ns === 2 ? (frio ? '🚨 CRÍTICO: sustrato muy frío' : '🚨 CRÍTICO: estrés térmico')
+                                 : ns === 1 ? (frio ? '⚠️ Sustrato frío' : '⚠️ Sustrato caliente')
+                                 : '✅ En rango ideal';
+      $('detalleSus').textContent = '';
+    } else {
+      $('tempSus').textContent = '--';
+      $('tempSus').className = 'valor';
+      $('estadoSus').textContent = 'Sin datos';
+      $('detalleSus').textContent = '⚠️ Sin lectura reciente del DS18B20 (revisa el cableado en el pin 12 y la resistencia de 4.7 kΩ)';
+    }
+
     const hayAmb = l.temp_ambiente !== '' && l.temp_ambiente != null;
     $('temp').textContent = hayAmb ? l.temp_ambiente.toFixed(1) + ' °C' : '--';
     $('humAmb').textContent = hayAmb ? l.hum_ambiente.toFixed(0) + ' %' : '--';
@@ -161,8 +189,9 @@ async function actualizarHistorial() {
   // Las filas sin DHT11 (vacías) quedan como hueco en la línea
   const num = v => (v === '' || v == null) ? null : +v;
   graficoAmb.data.labels = grafico.data.labels;
-  graficoAmb.data.datasets[0].data = datos.map(d => num(d.temp_ambiente));
-  graficoAmb.data.datasets[1].data = datos.map(d => num(d.hum_ambiente));
+  graficoAmb.data.datasets[0].data = datos.map(d => num(d.temp_sustrato));
+  graficoAmb.data.datasets[1].data = datos.map(d => num(d.temp_ambiente));
+  graficoAmb.data.datasets[2].data = datos.map(d => num(d.hum_ambiente));
   graficoAmb.update();
 }
 

@@ -1,5 +1,8 @@
 #include <SoftwareSerial.h>
 #include <DHT.h>  // Librería "DHT sensor library" de Adafruit (+ "Adafruit Unified Sensor")
+#include <OneWire.h> //Librería "Sensor de Temperatura DS18B20"
+#include <DallasTemperature.h>
+
 
 // Comunicación con el ESP32
 // RX = Pin 10 (Recibe desde TX2 del ESP32)
@@ -10,9 +13,16 @@ SoftwareSerial espSerial(10, 11);
 #define PIN_HUMSUELO_A0 A0   // Salida analógica (A0 del módulo)
 #define PIN_HUMSUELO_D0 2    // Salida digital (D0 del módulo)
 
+
 // Sensor DHT11: temperatura y humedad relativa del ambiente
 #define PIN_DHT 3
 DHT dht(PIN_DHT, DHT11);
+
+//Sensor tierra Sensor de Temperatura DS18B20
+#define ONE_WIRE_BUS 12      // Pin digital Sensor DS18B20 (con resistencia de 4.7k entre DATA y VCC)
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensorSuelo(&oneWire);
+
 
 const unsigned long INTERVALO_ENVIO = 2000;  // ms entre lecturas
 const int MUESTRAS = 10;                     // lecturas que se promedian
@@ -39,6 +49,12 @@ void setup() {
   pinMode(PIN_HUMSUELO_D0, INPUT); 
   dht.begin();
 
+  // La conversión del DS18B20 tarda hasta 750 ms; se pide al final de cada ciclo
+  // y se lee en el siguiente, así el loop no se queda esperando.
+  sensorSuelo.begin();
+  sensorSuelo.setWaitForConversion(false);
+  sensorSuelo.requestTemperatures();
+
   Serial.println("--- ARDUINO UNO LISTO ---");
 }
 
@@ -59,6 +75,18 @@ void loop() {
       Serial.println(amb);
     } else {
       Serial.println("DHT11: error de lectura");  // no se envía al ESP32
+    }
+
+    // Temperatura del sustrato (DS18B20). Formato: SUE,<temp_C>
+    // -127 = sensor desconectado; 85.0 = valor de arranque sin conversión válida.
+    float tempSuelo = sensorSuelo.getTempCByIndex(0);
+    sensorSuelo.requestTemperatures();  // la lectura queda lista para el próximo ciclo
+    if (tempSuelo != DEVICE_DISCONNECTED_C && tempSuelo != 85.0) {
+      String sue = "SUE," + String(tempSuelo, 1);
+      espSerial.println(sue);
+      Serial.println(sue);
+    } else {
+      Serial.println("DS18B20: error de lectura (revisa pin 12 y resistencia de 4.7k)");
     }
 
     // Formato: HUM,<valor_analogico_0-1023>,<estado_digital_0/1>

@@ -15,7 +15,8 @@ recientes: deque = deque(maxlen=300)
 estado_conexion = {"conectado": False, "mensaje": "Iniciando..."}
 ultima_recepcion: float | None = None
 _ambiente: dict = {}  # última lectura del DHT11: temp, hum, instante
-AMBIENTE_VIGENCIA = 10  # s; pasado este tiempo el dato del DHT11 se considera perdido
+_sustrato: dict = {}  # última lectura del DS18B20: temp, instante
+AMBIENTE_VIGENCIA = 10  # s; pasado este tiempo el dato del DHT11/DS18B20 se considera perdido
 SEGUNDOS_SIN_DATOS = 15 # sin lecturas durante este tiempo => se muestra desconectado
 
 
@@ -60,6 +61,21 @@ def parsear_ambiente(linea: str) -> tuple[float, float] | None:
     return temp, hum
 
 
+def parsear_sustrato(linea: str) -> float | None:
+    """Interpreta 'SUE,<temp_C>' del DS18B20. None si no es válida."""
+    partes = linea.strip().split(",")
+    if len(partes) != 2 or partes[0] != "SUE":
+        return None
+    try:
+        temp = float(partes[1])
+    except ValueError:
+        return None
+    # Rango de operación del DS18B20; descarta NaN y el -127 de sensor desconectado
+    if not -55 <= temp <= 125 or temp == -127:
+        return None
+    return temp
+
+
 def _procesar(lectura: dict) -> None:
     global ultima_lectura, ultima_recepcion
     # Une la última lectura del DHT11 si es reciente; si no, deja las columnas vacías
@@ -68,6 +84,12 @@ def _procesar(lectura: dict) -> None:
         lectura["hum_ambiente"] = _ambiente["hum"]
     else:
         lectura["temp_ambiente"] = lectura["hum_ambiente"] = ""
+
+    # Igual con la temperatura del sustrato (DS18B20)
+    if _sustrato and time.time() - _sustrato["instante"] <= AMBIENTE_VIGENCIA:
+        lectura["temp_sustrato"] = _sustrato["temp"]
+    else:
+        lectura["temp_sustrato"] = ""
 
     ultima_lectura = lectura
     ultima_recepcion = time.time()
@@ -78,6 +100,8 @@ def _procesar(lectura: dict) -> None:
     if lectura["temp_ambiente"] != "":
         valores["temp_ambiente"] = lectura["temp_ambiente"]
         valores["hum_ambiente"] = lectura["hum_ambiente"]
+    if lectura["temp_sustrato"] != "":
+        valores["temp_sustrato"] = lectura["temp_sustrato"]
     alertas.evaluar(valores)
 
 
@@ -87,6 +111,10 @@ def recibir_linea(linea: str) -> bool:
     if ambiente:
         # No genera fila: se une a la siguiente lectura HUM
         _ambiente.update(temp=ambiente[0], hum=ambiente[1], instante=time.time())
+        return True
+    sustrato = parsear_sustrato(linea)
+    if sustrato is not None:
+        _sustrato.update(temp=sustrato, instante=time.time())
         return True
     lectura = parsear(linea)
     if lectura is None:
@@ -125,6 +153,7 @@ def _bucle_simulado() -> None:
         pct = 75 + 12 * math.sin(t / 20) + random.uniform(-1, 1)
         cruda = round(config.ADC_SECO - pct / 100 * (config.ADC_SECO - config.ADC_MOJADO))
         recibir_linea(f"AMB,{22 + 3 * math.sin(t / 30):.1f},{55 + 8 * math.sin(t / 25):.1f}")
+        recibir_linea(f"SUE,{21.5 + 4 * math.sin(t / 40):.1f}")
         recibir_linea(f"HUM,{cruda},{int(pct < 70)}")
         t += 1
         time.sleep(2)

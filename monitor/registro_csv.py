@@ -7,7 +7,7 @@ from . import config
 
 CAMPOS = [
     "timestamp", "humedad_cruda", "humedad_pct", "humedad_d0",
-    "temp_ambiente", "hum_ambiente",
+    "temp_ambiente", "hum_ambiente", "temp_sustrato",
 ]
 _candado = threading.Lock()
 
@@ -15,7 +15,7 @@ _candado = threading.Lock()
 def preparar() -> None:
     """Al arrancar: deja el CSV con el encabezado actual.
 
-    Cubre archivos con el esquema anterior (4 columnas) o sin encabezado.
+    Cubre archivos con un esquema anterior (menos columnas) o sin encabezado.
     Antes de reescribir guarda una copia en lecturas.csv.bak.
     """
     ruta = config.ARCHIVO_CSV
