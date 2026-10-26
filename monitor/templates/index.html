@@ -28,6 +28,21 @@
   select { background:var(--tarjeta); color:var(--texto); border:1px solid var(--suave);
            border-radius:6px; padding:.3rem; }
   .grafico { position:relative; height:320px; }
+  button { background:var(--ok); color:#fff; border:0; border-radius:6px; padding:.45rem .9rem;
+           font:inherit; cursor:pointer; }
+  button.secundario { background:transparent; color:var(--texto); border:1px solid var(--suave); }
+  button:disabled { opacity:.5; cursor:default; }
+  dialog { background:var(--tarjeta); color:var(--texto); border:0; border-radius:12px;
+           padding:1.4rem; width:min(460px, calc(100vw - 2rem)); box-shadow:0 8px 30px rgba(0,0,0,.35); }
+  dialog::backdrop { background:rgba(0,0,0,.5); }
+  dialog h2 { margin:0 0 .3rem; font-size:1.15rem; }
+  .pasos { display:flex; gap:.5rem; margin:.8rem 0; }
+  .pasos span { flex:1; text-align:center; padding:.3rem; border-radius:6px; font-size:.85rem;
+                border:1px solid var(--suave); color:var(--suave); }
+  .pasos span.activo { border-color:var(--ok); color:var(--ok); font-weight:700; }
+  .pasos span.hecho { background:var(--banda); color:var(--ok); border-color:var(--ok); }
+  .voltaje { font-size:3rem; font-weight:700; text-align:center; margin:.4rem 0 0; }
+  .acciones { display:flex; gap:.6rem; justify-content:flex-end; margin-top:1rem; flex-wrap:wrap; }
 </style>
 </head>
 <body>
@@ -55,6 +70,17 @@
       <div>
         <div id="estadoSus">Sin datos</div>
         <div id="detalleSus" class="suave"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tarjeta">
+    <div class="suave">pH del sustrato (ideal {{ limites.ph.min }}–{{ limites.ph.max }})</div>
+    <div class="fila">
+      <div id="ph" class="valor">--</div>
+      <div>
+        <div id="estadoPh">Sin datos</div>
+        <div id="detallePh" class="suave"></div>
       </div>
     </div>
   </section>
@@ -88,7 +114,36 @@
     <strong>Histórico de temperaturas y humedad del ambiente</strong>
     <div class="grafico"><canvas id="graficoAmb"></canvas></div>
   </section>
+
+  <section class="tarjeta">
+    <div class="fila" style="justify-content:space-between; align-items:center">
+      <strong>Histórico de pH</strong>
+      <button id="btnCalibrar" type="button">🧪 Calibrar sensor</button>
+    </div>
+    <div class="grafico"><canvas id="graficoPh"></canvas></div>
+  </section>
 </main>
+
+<dialog id="dlgCal">
+  <h2>Calibrar sensor de pH (PH-4502C)</h2>
+  <div class="pasos">
+    <span id="paso1" class="activo">1 · Buffer pH 7.0</span>
+    <span id="paso2">2 · Buffer pH 4.0</span>
+  </div>
+  <div id="instruccion" class="suave"></div>
+  <div class="suave" style="text-align:center; margin-top:.8rem">Voltaje actual del sensor</div>
+  <div id="calVoltaje" class="voltaje">--</div>
+  <div id="calEstable" class="suave" style="text-align:center"></div>
+  <p class="suave" style="margin-bottom:0">
+    Guardado: <strong>voltaje_pH7</strong> = <span id="calV7">--</span> V ·
+    <strong>voltaje_pH4</strong> = <span id="calV4">--</span> V
+  </p>
+  <div id="calMensaje" style="min-height:1.4em; margin-top:.5rem"></div>
+  <div class="acciones">
+    <button id="btnCerrarCal" type="button" class="secundario">Cerrar</button>
+    <button id="btnGuardarCal" type="button">Guardar pH 7.0</button>
+  </div>
+</dialog>
 
 <script>
 const MIN = {{ hum_min }}, MAX = {{ hum_max }};
@@ -120,6 +175,19 @@ const graficoAmb = new Chart($('graficoAmb'), {
     scales: { yT: { position: 'left', title: { display: true, text: '°C' } },
               yH: { position: 'right', min: 0, max: 100, title: { display: true, text: '%' },
                     grid: { drawOnChartArea: false } },
+              x: { ticks: { maxTicksLimit: 8 } } },
+    plugins: { legend: { position: 'bottom' } } }
+});
+
+const graficoPh = new Chart($('graficoPh'), {
+  type: 'line',
+  data: { labels: [], datasets: [
+    { label: 'pH', data: [], borderColor: '#2e7d32', pointRadius: 0, tension: .25, borderWidth: 2 },
+    { label: 'Mínimo', data: [], borderColor: '#c62828', borderDash: [6,4], pointRadius: 0, borderWidth: 1 },
+    { label: 'Máximo', data: [], borderColor: '#c62828', borderDash: [6,4], pointRadius: 0, borderWidth: 1 },
+  ]},
+  options: { responsive: true, maintainAspectRatio: false, animation: false,
+    scales: { y: { suggestedMin: 5, suggestedMax: 9, title: { display: true, text: 'pH' } },
               x: { ticks: { maxTicksLimit: 8 } } },
     plugins: { legend: { position: 'bottom' } } }
 });
@@ -164,6 +232,22 @@ async function actualizarActual() {
       $('detalleSus').textContent = '⚠️ Sin lectura reciente del DS18B20 (revisa el cableado en el pin 12 y la resistencia de 4.7 kΩ)';
     }
 
+    const hayPh = l.ph !== '' && l.ph != null;
+    if (hayPh) {
+      const p = l.ph, np = nivel('ph', p), acido = p < LIM.ph.min;
+      $('ph').textContent = p.toFixed(2);
+      $('ph').className = 'valor ' + clase('ph', p);
+      $('estadoPh').textContent = np === 2 ? (acido ? '🚨 CRÍTICO: sustrato muy ácido' : '🚨 CRÍTICO: sustrato muy alcalino')
+                                : np === 1 ? (acido ? '⚠️ Sustrato ácido' : '⚠️ Sustrato alcalino')
+                                : '✅ En rango ideal';
+      $('detallePh').textContent = `Voltaje: ${(+l.ph_voltaje).toFixed(3)} V`;
+    } else {
+      $('ph').textContent = '--';
+      $('ph').className = 'valor';
+      $('estadoPh').textContent = 'Sin datos';
+      $('detallePh').textContent = '⚠️ Sin lectura reciente del PH-4502C (revisa el cableado en A1)';
+    }
+
     const hayAmb = l.temp_ambiente !== '' && l.temp_ambiente != null;
     $('temp').textContent = hayAmb ? l.temp_ambiente.toFixed(1) + ' °C' : '--';
     $('humAmb').textContent = hayAmb ? l.hum_ambiente.toFixed(0) + ' %' : '--';
@@ -193,7 +277,95 @@ async function actualizarHistorial() {
   graficoAmb.data.datasets[1].data = datos.map(d => num(d.temp_ambiente));
   graficoAmb.data.datasets[2].data = datos.map(d => num(d.hum_ambiente));
   graficoAmb.update();
+
+  graficoPh.data.labels = grafico.data.labels;
+  graficoPh.data.datasets[0].data = datos.map(d => num(d.ph));
+  graficoPh.data.datasets[1].data = datos.map(() => LIM.ph.min);
+  graficoPh.data.datasets[2].data = datos.map(() => LIM.ph.max);
+  graficoPh.update();
 }
+
+// ---- Calibración del sensor de pH ----
+const PASOS = {
+  7: { boton: 'Guardar pH 7.0', texto: 'Sumerge el electrodo en el buffer pH 7.0 y espera 30–60 s a que el voltaje se estabilice. ' +
+       'Gira el potenciómetro del módulo hasta leer 2.50 V y pulsa «Guardar».' },
+  4: { boton: 'Guardar pH 4.0', texto: 'Enjuaga el electrodo, sumérgelo en el buffer pH 4.0 y espera 30–60 s a que se estabilice. ' +
+       'No toques el potenciómetro; pulsa «Guardar».' },
+};
+let calPaso = 7, calTimer = null, calMuestras = [], calEnviando = false;
+
+function calMensaje(texto, tipo) {
+  $('calMensaje').textContent = texto;
+  $('calMensaje').style.color = tipo === 'error' ? 'var(--alerta)' : tipo === 'ok' ? 'var(--ok)' : 'var(--suave)';
+}
+
+function calMostrarPaso() {
+  $('paso1').className = calPaso === 7 ? 'activo' : 'hecho';
+  $('paso2').className = calPaso === 4 ? 'activo' : '';
+  $('instruccion').textContent = PASOS[calPaso].texto;
+  $('btnGuardarCal').textContent = PASOS[calPaso].boton;
+  calMuestras = [];
+}
+
+async function calActualizar() {
+  try {
+    const r = await (await fetch('/api/calibracion')).json();
+    const v = r.voltaje;
+    $('calVoltaje').textContent = v == null ? '--' : v.toFixed(3) + ' V';
+    $('calV7').textContent = r.voltaje_pH7 == null ? '--' : r.voltaje_pH7.toFixed(3);
+    $('calV4').textContent = r.voltaje_pH4 == null ? '--' : r.voltaje_pH4.toFixed(3);
+    if (v == null) {
+      calMuestras = [];
+      $('calEstable').textContent = '⚠️ Sin lectura del sensor';
+    } else {
+      calMuestras.push(v);
+      calMuestras = calMuestras.slice(-10);
+      const dif = Math.max(...calMuestras) - Math.min(...calMuestras);
+      $('calEstable').textContent = calMuestras.length < 10 ? 'Midiendo…'
+        : dif <= 0.02 ? '✅ Voltaje estable' : '⏳ Estabilizando… (variación ' + (dif * 1000).toFixed(0) + ' mV)';
+    }
+    $('btnGuardarCal').disabled = v == null || calEnviando;
+    return r;
+  } catch { $('calEstable').textContent = '🔴 Servidor no responde'; return null; }
+}
+
+async function calGuardar() {
+  calEnviando = true;
+  $('btnGuardarCal').disabled = true;
+  calMensaje('Enviando al Arduino…');
+  const antes = (await calActualizar())?.confirmaciones?.[calPaso] ?? 0;
+  try {
+    const r = await fetch('/api/calibracion', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                 body: JSON.stringify({ punto: calPaso }) });
+    if (!r.ok) throw new Error((await r.json()).error);
+    let confirmado = false;
+    for (let i = 0; i < 10 && !confirmado; i++) {   // el Arduino confirma con un ACK
+      await new Promise(res => setTimeout(res, 1000));
+      confirmado = ((await calActualizar())?.confirmaciones?.[calPaso] ?? 0) > antes;
+    }
+    if (!confirmado) throw new Error('el Arduino no confirmó (revisa la conexión y el Monitor Serial)');
+    if (calPaso === 7) {
+      calPaso = 4; calMostrarPaso();
+      calMensaje('✅ pH 7.0 guardado. Ahora pasa al buffer pH 4.0.', 'ok');
+    } else {
+      $('paso2').className = 'hecho';
+      calMensaje('✅ Calibración completa y guardada en el Arduino.', 'ok');
+    }
+  } catch (e) { calMensaje('❌ ' + e.message, 'error'); }
+  calEnviando = false;
+  calActualizar();
+}
+
+$('btnCalibrar').addEventListener('click', () => {
+  calPaso = 7; calMostrarPaso(); calMensaje('');
+  $('calVoltaje').textContent = '--';
+  $('dlgCal').showModal();
+  calActualizar();
+  calTimer = setInterval(() => { if (!calEnviando) calActualizar(); }, 1000);
+});
+$('btnGuardarCal').addEventListener('click', calGuardar);
+$('btnCerrarCal').addEventListener('click', () => $('dlgCal').close());
+$('dlgCal').addEventListener('close', () => clearInterval(calTimer));
 
 $('horas').addEventListener('change', actualizarHistorial);
 actualizarActual(); actualizarHistorial();

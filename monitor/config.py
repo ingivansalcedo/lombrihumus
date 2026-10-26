@@ -46,6 +46,13 @@ LIMITES["temp_sustrato"] = (
     "°C",
 )
 
+# pH de la cama (PH-4502C): ideal 6.8–7.2 (neutro), configurable en el .env
+LIMITES["ph"] = (
+    float(os.getenv("PH_MIN", "6.8")),
+    float(os.getenv("PH_MAX", "7.2")),
+    "",
+)
+
 _limite_opcional("temp_ambiente", "TEMP_AMB_MIN", "TEMP_AMB_MAX", "°C")
 _limite_opcional("hum_ambiente", "HUM_AMB_MIN", "HUM_AMB_MAX", "%")
 
@@ -66,6 +73,7 @@ def _critico(nombre, prefijo, minimo_def, maximo_def):
 
 _critico("humedad", "HUMEDAD", "60", "90")          # deshidratación / falta de oxígeno
 _critico("temp_sustrato", "TEMP_SUS", "10", "30")   # letargo / estrés térmico en el lecho
+_critico("ph", "PH", "6.0", "8.0")                  # acidez / alcalinidad que daña a las lombrices
 _critico("temp_ambiente", "TEMP_AMB", "10", "30")   # letargo / estrés térmico
 _critico("hum_ambiente", "HUM_AMB", "40", "")       # costra seca en la superficie
 

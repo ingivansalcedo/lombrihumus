@@ -48,6 +48,19 @@ void escucharBaliza() {
   servidorConocido = true;
 }
 
+// El servidor puede responder con un comando para el Arduino (calibración del pH
+// pedida desde la web): {"cmd":"CAL7","ok":true}. Se reenvía por Serial2.
+void reenviarComando(const String& respuesta) {
+  int ini = respuesta.indexOf("\"cmd\":\"");
+  if (ini < 0) return;
+  ini += 7;
+  int fin = respuesta.indexOf('"', ini);
+  if (fin <= ini) return;
+  String cmd = respuesta.substring(ini, fin);
+  Serial.println("[Servidor -> Arduino] " + cmd);
+  Serial2.println(cmd);
+}
+
 // Envía una línea del Arduino (ej: HUM,512,0) al servidor Flask por HTTP
 void enviarAlServidor(const String& linea) {
   if (WiFi.status() != WL_CONNECTED || !servidorConocido) {
@@ -62,10 +75,12 @@ void enviarAlServidor(const String& linea) {
   http.addHeader("Content-Type", "text/plain");
   http.addHeader("X-API-Key", API_KEY);
   int codigo = http.POST(linea);
+  String respuesta = (codigo == 200) ? http.getString() : "";
   http.end();
 
   if (codigo == 200) {
     fallosEnvio = 0;
+    reenviarComando(respuesta);
   } else {
     Serial.print("Error al enviar (");
     Serial.print(codigo);

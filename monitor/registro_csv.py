@@ -7,7 +7,7 @@ from . import config
 
 CAMPOS = [
     "timestamp", "humedad_cruda", "humedad_pct", "humedad_d0",
-    "temp_ambiente", "hum_ambiente", "temp_sustrato",
+    "temp_ambiente", "hum_ambiente", "temp_sustrato", "ph", "ph_voltaje",
 ]
 _candado = threading.Lock()
 

@@ -8,6 +8,7 @@ from . import config
 NOMBRES = {
     "humedad": "Humedad del sustrato",
     "temp_sustrato": "Temperatura del sustrato",
+    "ph": "pH del sustrato",
     "temp_ambiente": "Temperatura ambiente",
     "hum_ambiente": "Humedad relativa del ambiente",
 }
@@ -53,9 +54,10 @@ def _mensaje(sensor: str, valor: float, nuevo: int, previo: int) -> str:
     minimo, maximo, unidad = config.LIMITES[sensor]
     nombre = NOMBRES.get(sensor, sensor)
     sentido = "BAJA" if valor < minimo else "ALTA"
-    actual = f"Valor actual: {valor:.1f}{unidad}\nRango ideal: {minimo:g}–{maximo:g}{unidad}"
+    dec = 2 if sensor == "ph" else 1
+    actual = f"Valor actual: {valor:.{dec}f}{unidad}\nRango ideal: {minimo:g}–{maximo:g}{unidad}"
     if nuevo == 0:
-        return f"✅ {nombre} volvió al rango ideal ({valor:.1f}{unidad})"
+        return f"✅ {nombre} volvió al rango ideal ({valor:.{dec}f}{unidad})"
     if nuevo == 2:
         return f"🚨 CRÍTICO: {nombre} {sentido}\n{actual}\nRiesgo para las lombrices, requiere atención."
     if previo == 2:

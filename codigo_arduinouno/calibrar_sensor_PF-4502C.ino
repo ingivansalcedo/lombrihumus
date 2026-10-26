@@ -22,11 +22,11 @@ float leerVoltaje(){
 void loop(){
     float v = leerVoltaje();
     float m = (7.0-4.0)/(voltaje_pH7-voltaje_pH4);
-    float pH = m*v + (7.0-m*voltaje_pH7)
-    serial.print("Voltaje: ");
-    serial.print(v,3);
-    serial.print(" V  pH: ");
-    serial.println(pH,2);
+    float pH = m*v + (7.0-m*voltaje_pH7);
+    Serial.print("Voltaje: ");
+    Serial.print(v,3);
+    Serial.print(" V  pH: ");
+    Serial.println(pH,2);
     delay(1000);
 }
 
