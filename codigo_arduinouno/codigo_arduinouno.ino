@@ -148,11 +148,10 @@ void procesarComando(String cmd) {
 void leerComandos(Stream& fuente, String& buffer) {
   while (fuente.available() > 0) {
     char c = fuente.read();
-    if (c == '
-') {
+    if (c == 0x0A) {  // fin de línea
       procesarComando(buffer);
       buffer = "";
-    } else if (c != '' && buffer.length() < 20) {
+    } else if (c != 0x0D && buffer.length() < 20) {  // ignora el retorno de carro
       buffer += c;
     }
   }
