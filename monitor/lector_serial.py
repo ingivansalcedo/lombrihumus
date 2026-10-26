@@ -6,6 +6,7 @@ from collections import deque
 from datetime import datetime
 
 import serial
+from serial.tools import list_ports
 
 from . import alertas, config, registro_csv
 
@@ -20,6 +21,7 @@ _ph: dict = {}        # última lectura del PH-4502C: ph, voltaje, instante
 # Calibración guardada en el Arduino (voltaje_pH7 / voltaje_pH4) y confirmaciones recibidas
 calibracion: dict = {"v7": None, "v4": None, "calibrado": False}
 confirmaciones = {7: 0, 4: 0}
+BAUDIOS_ARDUINO = 9600  # el sketch del Arduino UNO habla a 9600
 COMANDOS_VALIDOS = {"CAL7", "CAL4"}
 _comandos: deque = deque(maxlen=5)  # pendientes de entregar al ESP32 (modo WiFi)
 _puerto_serial = None               # puerto abierto (modo serial)
@@ -187,6 +189,31 @@ def recibir_linea(linea: str) -> bool:
     return True
 
 
+def enviar_por_puerto(comando: str, puerto: str) -> str | None:
+    """Envía el comando directo al Arduino por el COM indicado y espera su ACK.
+
+    Devuelve None si se confirmó, o un texto con el motivo del fallo.
+    """
+    punto = int(comando[-1])
+    try:
+        # Abrir el puerto reinicia el Arduino UNO: hay que esperar a que arranque
+        with serial.Serial(puerto, BAUDIOS_ARDUINO, timeout=1) as p:
+            time.sleep(2.5)
+            p.reset_input_buffer()
+            p.write((comando + "\n").encode())
+            limite = time.time() + 5
+            while time.time() < limite:
+                linea = p.readline().decode("utf-8", errors="ignore").strip()
+                if linea == f"ACK,{punto}":
+                    confirmaciones[punto] += 1
+                    return None
+                if linea:
+                    recibir_linea(linea)
+    except serial.SerialException as e:
+        return f"no se pudo abrir {puerto} (¿está abierto el Monitor Serial u otro programa?): {e}"
+    return f"{puerto} abierto pero el Arduino no respondió (revisa que sea el puerto correcto y el sketch cargado)"
+
+
 def enviar_comando(comando: str) -> bool:
     """Pide al Arduino un comando de calibración (CAL7 / CAL4). False si no se pudo entregar."""
     if comando not in COMANDOS_VALIDOS:
@@ -205,6 +232,10 @@ def enviar_comando(comando: str) -> bool:
             return False
     _comandos.append(comando)  # el ESP32 lo recoge en la respuesta de su próximo envío
     return True
+
+
+def listar_puertos() -> list[str]:
+    return [p.device for p in list_ports.comports()]
 
 
 def tomar_comando() -> str:

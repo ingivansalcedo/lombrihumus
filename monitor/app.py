@@ -1,4 +1,5 @@
 import hmac
+import re
 
 from flask import Flask, jsonify, render_template, request
 
@@ -63,6 +64,11 @@ def estado_calibracion():
     )
 
 
+@app.route("/api/puertos")
+def puertos():
+    return jsonify(puertos=lector_serial.listar_puertos(), predeterminado=config.PUERTO_SERIAL)
+
+
 @app.route("/api/calibracion", methods=["POST"])
 def calibrar():
     """Guarda el voltaje actual como punto de calibración: {"punto": 7} o {"punto": 4}."""
@@ -71,6 +77,16 @@ def calibrar():
         return jsonify(error="punto debe ser 7 o 4"), 400
     if lector_serial.voltaje_ph_actual() is None:
         return jsonify(error="sin lectura reciente del sensor de pH"), 409
+    puerto = str((request.get_json(silent=True) or {}).get("puerto", "")).strip().upper()
+    if puerto:
+        # COM indicado en la web: comando directo al Arduino, sin pasar por el ESP32
+        if not re.fullmatch(r"COM\d{1,3}", puerto):
+            return jsonify(error="puerto inválido (ej: COM6)"), 400
+        if config.ENTRADA == "serial" and puerto == config.PUERTO_SERIAL.upper()                 and lector_serial._puerto_serial is not None:
+            pass  # el puerto ya está abierto por el lector: se usa el flujo normal
+        else:
+            error = lector_serial.enviar_por_puerto(f"CAL{punto}", puerto)
+            return (jsonify(error=error), 503) if error else jsonify(ok=True)
     if not lector_serial.enviar_comando(f"CAL{punto}"):
         return jsonify(error="no se pudo enviar el comando al Arduino"), 503
     return jsonify(ok=True)

@@ -141,6 +141,14 @@
     <span id="paso1" class="activo">1 · Buffer pH 7.0</span>
     <span id="paso2">2 · Buffer pH 4.0</span>
   </div>
+  <div class="fila" style="align-items:center; margin-bottom:.6rem">
+    <label for="calPuerto"><strong>Puerto COM del Arduino</strong></label>
+    <input id="calPuerto" list="listaPuertos" placeholder="COM6" size="8" autocomplete="off">
+    <datalist id="listaPuertos"></datalist>
+  </div>
+  <div class="suave" style="margin-top:-.3rem; margin-bottom:.6rem">
+    Con COM, el comando va directo al Arduino por USB (cierra el Monitor Serial). Vacío = vía ESP32/WiFi.
+  </div>
   <div id="instruccion" class="suave"></div>
   <div class="suave" style="text-align:center; margin-top:.8rem">Voltaje actual del sensor</div>
   <div id="calVoltaje" class="voltaje">--</div>
@@ -346,13 +354,16 @@ async function calActualizar() {
 async function calGuardar() {
   calEnviando = true;
   $('btnGuardarCal').disabled = true;
-  calMensaje('Enviando al Arduino…');
+  const puerto = $('calPuerto').value.trim().toUpperCase();
+  try { localStorage.setItem('calPuerto', puerto); } catch {}
+  calMensaje(puerto ? `Enviando a ${puerto} (≈8 s, el Arduino se reinicia)…` : 'Enviando al Arduino…');
   const antes = (await calActualizar())?.confirmaciones?.[calPaso] ?? 0;
   try {
     const r = await fetch('/api/calibracion', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                                 body: JSON.stringify({ punto: calPaso }) });
+                                                 body: JSON.stringify({ punto: calPaso, puerto }) });
     if (!r.ok) throw new Error((await r.json()).error);
-    let confirmado = false;
+    let confirmado = !!puerto;   // por COM la confirmación ya se esperó en el servidor
+    if (puerto) await calActualizar();
     for (let i = 0; i < 10 && !confirmado; i++) {   // el Arduino confirma con un ACK
       await new Promise(res => setTimeout(res, 1000));
       confirmado = ((await calActualizar())?.confirmaciones?.[calPaso] ?? 0) > antes;
@@ -370,9 +381,21 @@ async function calGuardar() {
   calActualizar();
 }
 
+async function cargarPuertos() {
+  try {
+    const r = await (await fetch('/api/puertos')).json();
+    $('listaPuertos').innerHTML = r.puertos.map(p => `<option value="${p}">`).join('');
+    if (!$('calPuerto').value) {
+      let guardado = ''; try { guardado = localStorage.getItem('calPuerto') || ''; } catch {}
+      $('calPuerto').value = guardado || r.predeterminado || '';
+    }
+  } catch {}
+}
+
 $('btnCalibrar').addEventListener('click', () => {
   calPaso = 7; calMostrarPaso(); calMensaje('');
   $('calVoltaje').textContent = '--';
+  cargarPuertos();
   $('dlgCal').showModal();
   calActualizar();
   calTimer = setInterval(() => { if (!calEnviando) calActualizar(); }, 1000);
