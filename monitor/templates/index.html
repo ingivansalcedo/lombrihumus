@@ -247,11 +247,14 @@ async function actualizarActual() {
     if (hayPh) {
       const p = l.ph, np = nivel('ph', p), acido = p < LIM.ph.min;
       $('ph').textContent = p.toFixed(2);
-      $('ph').className = 'valor ' + clase('ph', p);
-      $('estadoPh').textContent = np === 2 ? (acido ? '🚨 CRÍTICO: sustrato muy ácido' : '🚨 CRÍTICO: sustrato muy alcalino')
+      // Sin calibrar el valor no es fiable: no se colorea como alerta
+      $('ph').className = 'valor ' + (r.ph_calibrado ? clase('ph', p) : 'aviso');
+      $('estadoPh').textContent = !r.ph_calibrado ? '⚠️ Sin calibrar: valor no confiable'
+                                : np === 2 ? (acido ? '🚨 CRÍTICO: sustrato muy ácido' : '🚨 CRÍTICO: sustrato muy alcalino')
                                 : np === 1 ? (acido ? '⚠️ Sustrato ácido' : '⚠️ Sustrato alcalino')
                                 : '✅ En rango ideal';
-      $('detallePh').textContent = `Voltaje: ${(+l.ph_voltaje).toFixed(3)} V`;
+      $('detallePh').textContent = `Voltaje: ${(+l.ph_voltaje).toFixed(3)} V` +
+        (r.ph_calibrado ? '' : ' · usa «Calibrar sensor» (buffers pH 7.0 y 4.0)');
     } else {
       $('ph').textContent = '--';
       $('ph').className = 'valor';

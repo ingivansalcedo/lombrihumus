@@ -23,6 +23,7 @@ def actual():
     return jsonify(
         lectura=lector_serial.ultima_lectura,
         conexion=lector_serial.estado_actual(),
+        ph_calibrado=lector_serial.calibracion["calibrado"],
     )
 
 
