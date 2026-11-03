@@ -15,6 +15,23 @@ SoftwareSerial espSerial(10, 11);
 #define PIN_HUMSUELO_D0 2    // Salida digital (D0 del módulo)
 
 
+// Riego: relé en D4 que enciende la minibomba de agua.
+// Histéresis: enciende bajo HUM_MIN y apaga al llegar a HUM_MAX (rango objetivo 70-80 %).
+#define PIN_RELE 4
+const bool RELE_ACTIVO_BAJO = true;   // true = el relé enciende con LOW (lo común en módulos de 1 canal); false = con HIGH
+const int HUM_MIN = 70;               // % por debajo del cual se riega
+const int HUM_MAX = 80;               // % al que se deja de regar
+// Mismos valores de calibración del LM393 que ADC_SECO / ADC_MOJADO del .env del servidor
+const int ADC_SECO = 1000;
+const int ADC_MOJADO = 400;
+// Seguridad: la humedad tarda en subir tras el riego; se riega en pulsos para no encharcar
+const unsigned long RIEGO_MAX_MS = 15000UL;    // máximo encendido seguido
+const unsigned long RIEGO_PAUSA_MS = 60000UL;  // pausa obligatoria tras un pulso para que el agua se reparta
+bool bombaEncendida = false;
+unsigned long inicioRiego = 0;
+unsigned long finRiego = 0;
+bool hayPausa = false;
+
 // Sensor DHT11: temperatura y humedad relativa del ambiente
 #define PIN_DHT 3
 DHT dht(PIN_DHT, DHT11);
@@ -64,6 +81,40 @@ int leerHumedadCruda() {
     delay(5);
   }
   return suma / MUESTRAS;
+}
+
+void ponerBomba(bool encender) {
+  bombaEncendida = encender;
+  digitalWrite(PIN_RELE, (encender != RELE_ACTIVO_BAJO) ? HIGH : LOW);
+}
+
+float humedadPorcentaje(int cruda) {
+  float pct = (float)(ADC_SECO - cruda) / (ADC_SECO - ADC_MOJADO) * 100.0;
+  return constrain(pct, 0.0, 100.0);
+}
+
+// Control con histéresis y pulsos limitados. Una lectura fuera de rango apaga la bomba.
+void controlarRiego(int cruda) {
+  unsigned long ahora = millis();
+  if (cruda < 0 || cruda > 1023) {  // lectura inválida: por seguridad no se riega
+    if (bombaEncendida) ponerBomba(false);
+    return;
+  }
+  float pct = humedadPorcentaje(cruda);
+
+  if (bombaEncendida) {
+    if (pct >= HUM_MAX || ahora - inicioRiego >= RIEGO_MAX_MS) {
+      ponerBomba(false);
+      finRiego = ahora;
+      hayPausa = true;
+      Serial.println(pct >= HUM_MAX ? "BOMBA apagada: humedad recuperada"
+                                    : "BOMBA apagada: tiempo máximo del pulso (pausa para que se reparta el agua)");
+    }
+  } else if (pct < HUM_MIN && (!hayPausa || ahora - finRiego >= RIEGO_PAUSA_MS)) {
+    ponerBomba(true);
+    inicioRiego = ahora;
+    Serial.println("BOMBA encendida: humedad bajo el rango objetivo");
+  }
 }
 
 float leerVoltajePH(int muestras) {
@@ -161,6 +212,9 @@ void setup() {
   Serial.begin(9600); //Comunicación entre el PC y el Arduino UNO
   espSerial.begin(9600); //Comunicación entre el Arduino UNO y el ESP32
   pinMode(PIN_HUMSUELO_D0, INPUT); 
+  digitalWrite(PIN_RELE, RELE_ACTIVO_BAJO ? HIGH : LOW);  // nivel de apagado antes de configurar el pin (evita un pulso al arrancar)
+  pinMode(PIN_RELE, OUTPUT);
+  ponerBomba(false);
   dht.begin();
 
   // La conversión del DS18B20 tarda hasta 750 ms; se pide al final de cada ciclo
@@ -186,6 +240,7 @@ void loop() {
 
     int cruda = leerHumedadCruda();
     int digital = digitalRead(PIN_HUMSUELO_D0);
+    controlarRiego(cruda);
 
     // Ambiente (DHT11). Se envía antes que HUM para que el servidor
     // los junte en la misma fila. Formato: AMB,<temp_C>,<humedad_relativa_%>
@@ -223,6 +278,7 @@ void loop() {
     String linea = "HUM," + String(cruda) + "," + String(digital);
     espSerial.println(linea);  // hacia el ESP32
     Serial.println(linea);     // también por USB (útil para depurar)
+    Serial.println(bombaEncendida ? "BOMBA: encendida" : "BOMBA: apagada");
   }
 
   // --- Prueba de conexión PING/PONG (desactivada) ---
