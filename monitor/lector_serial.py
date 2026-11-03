@@ -17,6 +17,7 @@ estado_conexion = {"conectado": False, "mensaje": "Iniciando..."}
 ultima_recepcion: float | None = None
 _ambiente: dict = {}  # última lectura del DHT11: temp, hum, instante
 _sustrato: dict = {}  # última lectura del DS18B20: temp, instante
+_bomba: dict = {}     # último estado de la bomba (BOM): encendida, instante
 _ph: dict = {}        # última lectura del PH-4502C: ph, voltaje, instante
 # Calibración guardada en el Arduino (voltaje_pH7 / voltaje_pH4) y confirmaciones recibidas
 calibracion: dict = {"v7": None, "v4": None, "calibrado": False}
@@ -100,6 +101,21 @@ def parsear_ph(linea: str) -> tuple[float, float] | None:
     return ph, voltaje
 
 
+def parsear_bomba(linea: str) -> bool | None:
+    """Interpreta 'BOM,<0|1>' (estado del relé de la bomba). None si no es válida."""
+    partes = linea.strip().split(",")
+    if len(partes) != 2 or partes[0] != "BOM" or partes[1] not in ("0", "1"):
+        return None
+    return partes[1] == "1"
+
+
+def bomba_actual() -> bool | None:
+    """True/False según el último estado informado, o None si no es reciente."""
+    if _bomba and time.time() - _bomba["instante"] <= AMBIENTE_VIGENCIA:
+        return _bomba["encendida"]
+    return None
+
+
 def parsear_calibracion(linea: str) -> tuple[float, float, int] | None:
     """Interpreta 'CAL,<v_pH7>,<v_pH4>,<flags>' (flags: bit0 = pH7, bit1 = pH4 guardados)."""
     partes = linea.strip().split(",")
@@ -174,6 +190,10 @@ def recibir_linea(linea: str) -> bool:
     ph = parsear_ph(linea)
     if ph is not None:
         _ph.update(ph=ph[0], voltaje=ph[1], instante=time.time())
+        return True
+    bomba = parsear_bomba(linea)
+    if bomba is not None:
+        _bomba.update(encendida=bomba, instante=time.time())
         return True
     cal = parsear_calibracion(linea)
     if cal is not None:
@@ -285,6 +305,7 @@ def _bucle_simulado() -> None:
         recibir_linea(f"CAL,{_sim['v7']:.3f},{_sim['v4']:.3f},{_sim['flags']}")
         recibir_linea(f"PH,{ph:.2f},{_sim['v']:.3f}")
         recibir_linea(f"SUE,{21.5 + 4 * math.sin(t / 40):.1f}")
+        recibir_linea(f"BOM,{int(pct < 70)}")
         recibir_linea(f"HUM,{cruda},{int(pct < 70)}")
         t += 1
         time.sleep(2)

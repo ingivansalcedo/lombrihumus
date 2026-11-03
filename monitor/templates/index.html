@@ -68,6 +68,7 @@
         <div id="detalle" class="suave"></div>
       </div>
     </div>
+    <div id="estadoBomba" class="suave" style="margin-top:.6rem">💧 Bomba de riego: sin datos</div>
   </section>
 
   <section class="tarjeta">
@@ -234,6 +235,10 @@ async function actualizarActual() {
                             : n === 1 ? (seco ? '⚠️ Demasiado seco' : '⚠️ Demasiado húmedo')
                             : '✅ En rango ideal';
     $('detalle').textContent = `Valor crudo: ${l.humedad_cruda} · D0: ${l.humedad_d0} · ${l.timestamp.replace('T',' ')}`;
+
+    $('estadoBomba').textContent = r.bomba == null ? '💧 Bomba de riego: sin datos'
+      : r.bomba ? '💧 Bomba de riego: 🟢 ENCENDIDA (regando)' : '💧 Bomba de riego: ⚪ apagada';
+    $('estadoBomba').style.color = r.bomba ? 'var(--ok)' : '';
 
     const haySus = l.temp_sustrato !== '' && l.temp_sustrato != null;
     if (haySus) {

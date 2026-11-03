@@ -25,6 +25,7 @@ def actual():
         lectura=lector_serial.ultima_lectura,
         conexion=lector_serial.estado_actual(),
         ph_calibrado=lector_serial.calibracion["calibrado"],
+        bomba=lector_serial.bomba_actual(),
     )
 
 

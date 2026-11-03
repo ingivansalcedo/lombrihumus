@@ -278,7 +278,10 @@ void loop() {
     String linea = "HUM," + String(cruda) + "," + String(digital);
     espSerial.println(linea);  // hacia el ESP32
     Serial.println(linea);     // también por USB (útil para depurar)
-    Serial.println(bombaEncendida ? "BOMBA: encendida" : "BOMBA: apagada");
+    // Estado de la bomba para la web. Formato: BOM,<0/1>  (se envía antes que HUM)
+    String bom = "BOM," + String(bombaEncendida ? 1 : 0);
+    espSerial.println(bom);
+    Serial.println(bom);
   }
 
   // --- Prueba de conexión PING/PONG (desactivada) ---
