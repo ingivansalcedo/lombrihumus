@@ -81,6 +81,7 @@ ALERTA_CRITICA_ESPERA_MIN = int(os.getenv("ALERTA_CRITICA_ESPERA_MIN", "5"))
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_CHAT_GRUPO = os.getenv("CHAT_ID_GRUPO", "")
 ALERTA_ESPERA_MIN = int(os.getenv("ALERTA_ESPERA_MIN", "30"))
 
 ARCHIVO_CSV = Path(os.getenv("ARCHIVO_CSV", RAIZ / "datos" / "lecturas.csv"))

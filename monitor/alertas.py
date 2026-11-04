@@ -19,13 +19,13 @@ _ultima_alerta: dict[str, float] = {}  # sensor -> instante del último aviso
 
 
 def enviar_telegram(texto: str) -> bool:
-    if not config.TELEGRAM_TOKEN or not config.TELEGRAM_CHAT_ID:
+    if not config.TELEGRAM_TOKEN or not config.TELEGRAM_CHAT_ID or not config.TELEGRAM_CHAT_GRUPO:
         print("[Telegram] sin configurar, mensaje no enviado:", texto)
         return False
     url = f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}/sendMessage"
     try:
         r = requests.post(
-            url, json={"chat_id": config.TELEGRAM_CHAT_ID, "text": texto}, timeout=10
+            url, json={"chat_id": config.TELEGRAM_CHAT_GRUPO, "text": texto}, timeout=10
         )
         r.raise_for_status()
         return True
